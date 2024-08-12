@@ -1,0 +1,109 @@
+---
+- name: Setup a sudo user and update package lists on a VM
+  hosts:  "{{ target_host }}"
+  become: yes # Use sudo to perform operations
+  user: root
+  tasks:
+    - name: Ensure the user is added to the system
+      user:
+        name: deployer # Adjust the username accordingly
+        state: present
+        createhome: yes
+        shell: /bin/bash
+
+    - name: Add user to sudo group
+      user:
+        name: deployer
+        groups: sudo
+        append: yes
+
+    - name: Allow 'deployer' user to execute sudo commands without a password
+      lineinfile:
+        path: /etc/sudoers.d/deployer
+        state: present
+        create: yes # Ensure the file is created if it does not exist
+        line: "deployer ALL=(ALL) NOPASSWD: ALL"
+        validate: "visudo -cf %s" # This line ensures the file syntax is correct
+
+    - name: Run 'apt update' as a sudo operation specifically by 'deployer' user
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600 
+
+    - name: Ensure the deployer .ssh directory exists
+      file:
+        path: "/home/deployer/.ssh"
+        state: directory
+        owner: deployer
+        group: deployer
+        mode: '0700'
+
+    - name: Copy authorized_keys from root to deployer
+      copy:
+        src: "/root/.ssh/authorized_keys"
+        dest: "/home/deployer/.ssh/authorized_keys"
+        owner: deployer
+        group: deployer
+        mode: '0600'
+        force: yes
+        remote_src: true
+
+    - name: Ensure permissions on deployer's .ssh directory
+      file:
+        path: "/home/deployer/.ssh"
+        state: directory
+        owner: deployer
+        group: deployer
+        recurse: yes
+        mode: '0700'
+
+
+# # ! Install Docker
+#     - name: Install aptitude using apt
+#       apt:
+#         name: aptitude
+#         state: latest
+
+#     - name: Install required system packages
+#       apt:
+#         name: "{{ packages }}"
+#       vars:
+#         packages:
+#           - apt-transport-https
+#           - ca-certificates
+#           - curl
+#           - gnupg-agent
+#           - software-properties-common
+
+#     - name: Add Docker’s official GPG key
+#       ansible.builtin.apt_key:
+#         url: https://download.docker.com/linux/ubuntu/gpg
+#         state: present
+
+#     - name: Add Docker repository
+#       ansible.builtin.apt_repository:
+#         repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable
+#         state: present
+
+#     - name: Install Docker Engine
+#       apt:
+#         name: docker-ce
+#         state: latest
+#         update_cache: yes
+
+#     - name: Ensure Docker service is running
+#       service:
+#         name: docker
+#         state: started
+#         enabled: yes
+
+#     - name: Add deployer user to the Docker group
+#       user:
+#         name: deployer
+#         groups: docker
+#         append: yes
+
+#     - name: Restart Docker to apply group changes
+#       service:
+#         name: docker
+#         state: restarted
